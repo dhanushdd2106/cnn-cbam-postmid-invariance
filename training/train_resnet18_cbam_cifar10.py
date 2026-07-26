@@ -197,7 +197,7 @@ def main():
     )
 
 
-    num_epochs = 50
+    num_epochs = 25
 
 
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
