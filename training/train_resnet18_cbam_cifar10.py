@@ -108,7 +108,7 @@ def main():
     print("Loading CIFAR-10 from Hugging Face...")
 
     hf_dataset = load_dataset(
-        "cifar10"
+        "uoft-cs/cifar10"
     )
 
 
