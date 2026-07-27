@@ -159,9 +159,9 @@ def get_dataset(dataset_name, extra_transform):
 
         base_transform = transforms.Compose([
 
-        transforms.ToTensor(),
-
         extra_transform,
+
+        transforms.ToTensor(),
 
         transforms.Normalize(
 
