@@ -244,7 +244,7 @@ def main():
 
 
 
-    num_epochs = 30
+    num_epochs = 25
 
 
     best_acc = 0.0
