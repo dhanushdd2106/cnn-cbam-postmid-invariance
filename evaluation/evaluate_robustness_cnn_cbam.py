@@ -5,19 +5,51 @@ import argparse
 
 import torch
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
-from datasets import load_dataset
-
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from datasets import load_dataset
 
 from models.cnn_cbam_model import CNN_CBAM
+
+
+
+# ---------------------------------------------------
+# Hugging Face CIFAR-10 Dataset Wrapper
+# ---------------------------------------------------
+
+class CIFAR10HFDataset(Dataset):
+
+    def __init__(self, dataset, transform=None):
+
+        self.dataset = dataset
+        self.transform = transform
+
+
+    def __len__(self):
+
+        return len(self.dataset)
+
+
+    def __getitem__(self, idx):
+
+        image = self.dataset[idx]["img"]
+
+        label = self.dataset[idx]["label"]
+
+
+        if self.transform:
+
+            image = self.transform(image)
+
+
+        return image, label
 
 
 
@@ -28,6 +60,7 @@ from models.cnn_cbam_model import CNN_CBAM
 class TranslateTransform:
 
     def __init__(self, px):
+
         self.px = px
 
 
@@ -46,6 +79,7 @@ class TranslateTransform:
 class RotateTransform:
 
     def __init__(self, angle):
+
         self.angle = angle
 
 
@@ -75,41 +109,6 @@ class VFlipTransform:
 
 
 # ---------------------------------------------------
-# HF CIFAR Dataset Wrapper
-# ---------------------------------------------------
-
-class CIFAR10HFDataset(torch.utils.data.Dataset):
-
-    def __init__(self, dataset, transform=None):
-
-        self.dataset = dataset
-        self.transform = transform
-
-
-    def __len__(self):
-
-        return len(self.dataset)
-
-
-    def __getitem__(self, idx):
-
-        item = self.dataset[idx]
-
-        image = item["img"]
-
-        label = item["label"]
-
-
-        if self.transform:
-
-            image = self.transform(image)
-
-
-        return image, label
-
-
-
-# ---------------------------------------------------
 # Evaluation
 # ---------------------------------------------------
 
@@ -124,7 +123,6 @@ def evaluate(model, loader, device):
     with torch.no_grad():
 
         for images, labels in loader:
-
 
             images = images.to(device)
 
@@ -142,9 +140,7 @@ def evaluate(model, loader, device):
             total += labels.size(0)
 
 
-
     return 100.0 * correct / total
-
 
 
 
@@ -161,16 +157,7 @@ def get_dataset(dataset_name, extra_transform):
         print("Loading CIFAR-10 from Hugging Face...")
 
 
-        hf_dataset = load_dataset(
-
-            "uoft-cs/cifar10",
-
-            split="test"
-
-        )
-
-
-        transform = transforms.Compose([
+        base_transform = transforms.Compose([
 
             extra_transform,
 
@@ -188,11 +175,19 @@ def get_dataset(dataset_name, extra_transform):
 
 
 
+        hf_dataset = load_dataset(
+
+            "uoft-cs/cifar10"
+
+        )
+
+
+
         dataset = CIFAR10HFDataset(
 
-            hf_dataset,
+            hf_dataset["test"],
 
-            transform
+            base_transform
 
         )
 
@@ -201,7 +196,7 @@ def get_dataset(dataset_name, extra_transform):
     elif dataset_name == "mnist":
 
 
-        transform = transforms.Compose([
+        base_transform = transforms.Compose([
 
             extra_transform,
 
@@ -227,29 +222,26 @@ def get_dataset(dataset_name, extra_transform):
 
             download=True,
 
-            transform=transform
+            transform=base_transform
 
         )
-
 
 
     else:
 
         raise ValueError(
 
-            "Dataset should be cifar10 or mnist"
+            "dataset_name must be cifar10 or mnist"
 
         )
-
 
 
     return dataset
 
 
 
-
 # ---------------------------------------------------
-# Load CNN+CBAM
+# Load CNN+CBAM Model
 # ---------------------------------------------------
 
 def load_model(dataset_name, checkpoint_path, device):
@@ -284,26 +276,25 @@ def load_model(dataset_name, checkpoint_path, device):
 
 
 
-    checkpoint = torch.load(
+    model.load_state_dict(
 
-        checkpoint_path,
+        torch.load(
 
-        map_location=device
+            checkpoint_path,
+
+            map_location=device
+
+        )
 
     )
 
 
-    model.load_state_dict(checkpoint)
-
-
     model.to(device)
-
 
     model.eval()
 
 
     return model
-
 
 
 
@@ -371,7 +362,6 @@ def run_robustness_tests(
     )
 
 
-
     results = []
 
 
@@ -396,10 +386,11 @@ def run_robustness_tests(
 
         shuffle=False,
 
-        num_workers=2
+        num_workers=2,
+
+        pin_memory=True
 
     )
-
 
 
     acc = evaluate(
@@ -420,7 +411,6 @@ def run_robustness_tests(
     )
 
 
-
     results.append({
 
         "transform":"baseline",
@@ -436,7 +426,11 @@ def run_robustness_tests(
     # ---------------- Translation ----------------
 
 
-    translation_values = list(range(2,42,2))
+    translation_values = list(
+
+        range(2,42,2)
+
+    )
 
 
     for px in translation_values:
@@ -459,10 +453,11 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2
+            num_workers=2,
+
+            pin_memory=True
 
         )
-
 
 
         acc = evaluate(
@@ -481,7 +476,6 @@ def run_robustness_tests(
             f"[Translation {px}px] Accuracy: {acc:.2f}%"
 
         )
-
 
 
         results.append({
@@ -533,10 +527,11 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2
+            num_workers=2,
+
+            pin_memory=True
 
         )
-
 
 
         acc = evaluate(
@@ -555,7 +550,6 @@ def run_robustness_tests(
             f"[Rotation {angle} deg] Accuracy: {acc:.2f}%"
 
         )
-
 
 
         results.append({
@@ -599,10 +593,11 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2
+            num_workers=2,
+
+            pin_memory=True
 
         )
-
 
 
         acc = evaluate(
@@ -623,7 +618,6 @@ def run_robustness_tests(
         )
 
 
-
         results.append({
 
             "transform":name,
@@ -636,11 +630,10 @@ def run_robustness_tests(
 
 
 
-    # ---------------- Save CSV ----------------
+    # ---------------- Save Results ----------------
 
 
     df = pd.DataFrame(results)
-
 
 
     csv_path = (
@@ -661,10 +654,9 @@ def run_robustness_tests(
 
     print(
 
-        f"Results saved: {csv_path}"
+        f"Results saved to {csv_path}"
 
     )
-
 
 
     plot_results(
@@ -676,9 +668,7 @@ def run_robustness_tests(
     )
 
 
-
     return df
-
 
 
 
@@ -700,8 +690,7 @@ def plot_results(df, dataset_name):
     )
 
 
-
-    translation = df[
+    trans_df = df[
 
         df["transform"]=="translation"
 
@@ -710,9 +699,9 @@ def plot_results(df, dataset_name):
 
     axes[0].plot(
 
-        translation["value"],
+        trans_df["value"],
 
-        translation["accuracy"],
+        trans_df["accuracy"],
 
         marker="o"
 
@@ -721,7 +710,7 @@ def plot_results(df, dataset_name):
 
     axes[0].set_title(
 
-        "Accuracy vs Translation"
+        f"CNN+CBAM {dataset_name.upper()} Translation"
 
     )
 
@@ -739,7 +728,7 @@ def plot_results(df, dataset_name):
 
 
 
-    rotation = df[
+    rot_df = df[
 
         df["transform"]=="rotation"
 
@@ -748,9 +737,9 @@ def plot_results(df, dataset_name):
 
     axes[1].plot(
 
-        rotation["value"],
+        rot_df["value"],
 
-        rotation["accuracy"],
+        rot_df["accuracy"],
 
         marker="o"
 
@@ -759,7 +748,7 @@ def plot_results(df, dataset_name):
 
     axes[1].set_title(
 
-        "Accuracy vs Rotation"
+        f"CNN+CBAM {dataset_name.upper()} Rotation"
 
     )
 
@@ -783,7 +772,7 @@ def plot_results(df, dataset_name):
 
 
 
-    path = (
+    plot_path = (
 
         f"./plots/cnn_cbam/{dataset_name}/robustness.png"
 
@@ -792,7 +781,7 @@ def plot_results(df, dataset_name):
 
     plt.savefig(
 
-        path,
+        plot_path,
 
         dpi=150
 
@@ -801,13 +790,12 @@ def plot_results(df, dataset_name):
 
     print(
 
-        f"Plot saved: {path}"
+        f"Plot saved to {plot_path}"
 
     )
 
 
     plt.close()
-
 
 
 
@@ -827,7 +815,13 @@ if __name__ == "__main__":
 
         required=True,
 
-        choices=["cifar10","mnist"]
+        choices=[
+
+            "cifar10",
+
+            "mnist"
+
+        ]
 
     )
 
