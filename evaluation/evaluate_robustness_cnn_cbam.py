@@ -275,18 +275,23 @@ def load_model(dataset_name, checkpoint_path, device):
         )
 
 
-
-    model.load_state_dict(
-
-        torch.load(
-
-            checkpoint_path,
-
-            map_location=device
-
-        )
-
+    state_dict = torch.load(
+        checkpoint_path,
+        map_location=device
     )
+
+    model.load_state_dict(state_dict)
+
+    # --- diagnostic block: remove once issue is resolved ---
+    print("Checkpoint path :", os.path.abspath(checkpoint_path))
+    print("Checkpoint mtime:", os.path.getmtime(checkpoint_path))
+
+    checksum = sum(p.sum().item() for p in model.parameters())
+    print("Param checksum  :", checksum)
+
+    num_keys = len(state_dict)
+    print("State dict keys :", num_keys)
+    # ---------------------------------------------------------
 
 
     model.to(device)
