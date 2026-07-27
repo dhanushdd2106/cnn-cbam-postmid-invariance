@@ -1,4 +1,4 @@
-# evaluate_robustness_cnn_cbam.py
+# evaluation/evaluate_robustness_cnn_cbam.py
 
 import os
 import argparse
@@ -11,8 +11,11 @@ import torchvision
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
+from datasets import load_dataset
+
 import pandas as pd
 import matplotlib.pyplot as plt
+
 
 from models.cnn_cbam_model import CNN_CBAM
 
@@ -50,7 +53,7 @@ class RotateTransform:
 
         return TF.rotate(
             img,
-            angle=self.angle
+            self.angle
         )
 
 
@@ -68,6 +71,41 @@ class VFlipTransform:
     def __call__(self, img):
 
         return TF.vflip(img)
+
+
+
+# ---------------------------------------------------
+# HF CIFAR Dataset Wrapper
+# ---------------------------------------------------
+
+class CIFAR10HFDataset(torch.utils.data.Dataset):
+
+    def __init__(self, dataset, transform=None):
+
+        self.dataset = dataset
+        self.transform = transform
+
+
+    def __len__(self):
+
+        return len(self.dataset)
+
+
+    def __getitem__(self, idx):
+
+        item = self.dataset[idx]
+
+        image = item["img"]
+
+        label = item["label"]
+
+
+        if self.transform:
+
+            image = self.transform(image)
+
+
+        return image, label
 
 
 
@@ -93,12 +131,10 @@ def evaluate(model, loader, device):
             labels = labels.to(device)
 
 
-
             outputs = model(images)
 
 
             _, predicted = outputs.max(1)
-
 
 
             correct += predicted.eq(labels).sum().item()
@@ -113,13 +149,25 @@ def evaluate(model, loader, device):
 
 
 # ---------------------------------------------------
-# Dataset loader
+# Dataset Loader
 # ---------------------------------------------------
 
 def get_dataset(dataset_name, extra_transform):
 
 
     if dataset_name == "cifar10":
+
+
+        print("Loading CIFAR-10 from Hugging Face...")
+
+
+        hf_dataset = load_dataset(
+
+            "uoft-cs/cifar10",
+
+            split="test"
+
+        )
 
 
         transform = transforms.Compose([
@@ -140,17 +188,14 @@ def get_dataset(dataset_name, extra_transform):
 
 
 
-        dataset = torchvision.datasets.CIFAR10(
+        dataset = CIFAR10HFDataset(
 
-            root="./datasets/data",
+            hf_dataset,
 
-            train=False,
-
-            download=True,
-
-            transform=transform
+            transform
 
         )
+
 
 
     elif dataset_name == "mnist":
@@ -187,11 +232,15 @@ def get_dataset(dataset_name, extra_transform):
         )
 
 
+
     else:
 
         raise ValueError(
-            "Dataset must be cifar10 or mnist"
+
+            "Dataset should be cifar10 or mnist"
+
         )
+
 
 
     return dataset
@@ -200,7 +249,7 @@ def get_dataset(dataset_name, extra_transform):
 
 
 # ---------------------------------------------------
-# Load CNN+CBAM model
+# Load CNN+CBAM
 # ---------------------------------------------------
 
 def load_model(dataset_name, checkpoint_path, device):
@@ -259,7 +308,7 @@ def load_model(dataset_name, checkpoint_path, device):
 
 
 # ---------------------------------------------------
-# Robustness testing
+# Robustness Testing
 # ---------------------------------------------------
 
 def run_robustness_tests(
@@ -327,9 +376,8 @@ def run_robustness_tests(
 
 
 
-    # ---------------------------------------------------
-    # Baseline
-    # ---------------------------------------------------
+    # ---------------- Baseline ----------------
+
 
     dataset = get_dataset(
 
@@ -348,9 +396,7 @@ def run_robustness_tests(
 
         shuffle=False,
 
-        num_workers=2,
-
-        pin_memory=True
+        num_workers=2
 
     )
 
@@ -374,6 +420,7 @@ def run_robustness_tests(
     )
 
 
+
     results.append({
 
         "transform":"baseline",
@@ -386,9 +433,8 @@ def run_robustness_tests(
 
 
 
-    # ---------------------------------------------------
-    # Translation
-    # ---------------------------------------------------
+    # ---------------- Translation ----------------
+
 
     translation_values = list(range(2,42,2))
 
@@ -413,9 +459,7 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2,
-
-            pin_memory=True
+            num_workers=2
 
         )
 
@@ -439,6 +483,7 @@ def run_robustness_tests(
         )
 
 
+
         results.append({
 
             "transform":"translation",
@@ -451,9 +496,8 @@ def run_robustness_tests(
 
 
 
-    # ---------------------------------------------------
-    # Rotation
-    # ---------------------------------------------------
+    # ---------------- Rotation ----------------
+
 
     rotation_values = [
 
@@ -489,9 +533,7 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2,
-
-            pin_memory=True
+            num_workers=2
 
         )
 
@@ -515,6 +557,7 @@ def run_robustness_tests(
         )
 
 
+
         results.append({
 
             "transform":"rotation",
@@ -527,9 +570,8 @@ def run_robustness_tests(
 
 
 
-    # ---------------------------------------------------
-    # Flip tests
-    # ---------------------------------------------------
+    # ---------------- Flips ----------------
+
 
     for name, transform in [
 
@@ -562,6 +604,7 @@ def run_robustness_tests(
         )
 
 
+
         acc = evaluate(
 
             model,
@@ -580,6 +623,7 @@ def run_robustness_tests(
         )
 
 
+
         results.append({
 
             "transform":name,
@@ -592,9 +636,8 @@ def run_robustness_tests(
 
 
 
-    # ---------------------------------------------------
-    # Save CSV
-    # ---------------------------------------------------
+    # ---------------- Save CSV ----------------
+
 
     df = pd.DataFrame(results)
 
@@ -605,7 +648,6 @@ def run_robustness_tests(
         f"./results/cnn_cbam/{dataset_name}/robustness.csv"
 
     )
-
 
 
     df.to_csv(
@@ -619,7 +661,7 @@ def run_robustness_tests(
 
     print(
 
-        f"Results saved to {csv_path}"
+        f"Results saved: {csv_path}"
 
     )
 
@@ -632,6 +674,7 @@ def run_robustness_tests(
         dataset_name
 
     )
+
 
 
     return df
@@ -665,7 +708,6 @@ def plot_results(df, dataset_name):
     ]
 
 
-
     axes[0].plot(
 
         translation["value"],
@@ -679,17 +721,15 @@ def plot_results(df, dataset_name):
 
     axes[0].set_title(
 
-        f"CNN+CBAM {dataset_name.upper()} Translation"
+        "Accuracy vs Translation"
 
     )
-
 
     axes[0].set_xlabel(
 
         "Pixels"
 
     )
-
 
     axes[0].set_ylabel(
 
@@ -706,7 +746,6 @@ def plot_results(df, dataset_name):
     ]
 
 
-
     axes[1].plot(
 
         rotation["value"],
@@ -720,7 +759,7 @@ def plot_results(df, dataset_name):
 
     axes[1].set_title(
 
-        f"CNN+CBAM {dataset_name.upper()} Rotation"
+        "Accuracy vs Rotation"
 
     )
 
@@ -744,17 +783,16 @@ def plot_results(df, dataset_name):
 
 
 
-    plot_path = (
+    path = (
 
         f"./plots/cnn_cbam/{dataset_name}/robustness.png"
 
     )
 
 
-
     plt.savefig(
 
-        plot_path,
+        path,
 
         dpi=150
 
@@ -763,7 +801,7 @@ def plot_results(df, dataset_name):
 
     print(
 
-        f"Plot saved to {plot_path}"
+        f"Plot saved: {path}"
 
     )
 
@@ -787,17 +825,9 @@ if __name__ == "__main__":
 
         "--dataset",
 
-        type=str,
-
         required=True,
 
-        choices=[
-
-            "cifar10",
-
-            "mnist"
-
-        ]
+        choices=["cifar10","mnist"]
 
     )
 
@@ -805,8 +835,6 @@ if __name__ == "__main__":
     parser.add_argument(
 
         "--checkpoint",
-
-        type=str,
 
         required=True
 
