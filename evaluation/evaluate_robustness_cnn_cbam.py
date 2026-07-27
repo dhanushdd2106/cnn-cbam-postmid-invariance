@@ -5,7 +5,7 @@ import argparse
 
 import torch
 
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 import torchvision
 import torchvision.transforms as transforms
@@ -14,70 +14,28 @@ import torchvision.transforms.functional as TF
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from datasets import load_dataset
-
 from models.cnn_cbam_model import CNN_CBAM
 
 
 
 # ---------------------------------------------------
-# Hugging Face CIFAR-10 Wrapper
-# ---------------------------------------------------
-
-class CIFAR10HFDataset(Dataset):
-
-    def __init__(self, dataset, transform=None):
-
-        self.dataset = dataset
-        self.transform = transform
-
-
-    def __len__(self):
-
-        return len(self.dataset)
-
-
-    def __getitem__(self, idx):
-
-        image = self.dataset[idx]["img"]
-
-        label = self.dataset[idx]["label"]
-
-
-        if self.transform:
-
-            image = self.transform(image)
-
-
-        return image, label
-
-
-
-# ---------------------------------------------------
-# Transform Classes
+# Custom transforms
 # ---------------------------------------------------
 
 class TranslateTransform:
 
     def __init__(self, px):
-
         self.px = px
 
 
     def __call__(self, img):
 
         return TF.affine(
-
             img,
-
             angle=0,
-
             translate=(self.px, self.px),
-
             scale=1.0,
-
             shear=0
-
         )
 
 
@@ -85,18 +43,14 @@ class TranslateTransform:
 class RotateTransform:
 
     def __init__(self, angle):
-
         self.angle = angle
 
 
     def __call__(self, img):
 
         return TF.rotate(
-
             img,
-
             angle=self.angle
-
         )
 
 
@@ -119,7 +73,7 @@ class VFlipTransform:
 
 
 # ---------------------------------------------------
-# Evaluation Function
+# Evaluation
 # ---------------------------------------------------
 
 def evaluate(model, loader, device):
@@ -127,7 +81,6 @@ def evaluate(model, loader, device):
     model.eval()
 
     correct = 0
-
     total = 0
 
 
@@ -148,6 +101,7 @@ def evaluate(model, loader, device):
             _, predicted = outputs.max(1)
 
 
+
             correct += predicted.eq(labels).sum().item()
 
             total += labels.size(0)
@@ -160,7 +114,7 @@ def evaluate(model, loader, device):
 
 
 # ---------------------------------------------------
-# Dataset Loading
+# Dataset Loader
 # ---------------------------------------------------
 
 def get_dataset(dataset_name, extra_transform):
@@ -186,27 +140,17 @@ def get_dataset(dataset_name, extra_transform):
         ])
 
 
+        dataset = torchvision.datasets.CIFAR10(
 
-        print(
-            "Loading CIFAR-10 from Hugging Face..."
-        )
+            root="./datasets/data",
 
+            train=False,
 
-        hf_dataset = load_dataset(
+            download=True,
 
-            "uoft-cs/cifar10"
-
-        )
-
-
-        dataset = CIFAR10HFDataset(
-
-            hf_dataset["test"],
-
-            transform
+            transform=transform
 
         )
-
 
 
         in_channels = 3
@@ -258,10 +202,9 @@ def get_dataset(dataset_name, extra_transform):
     else:
 
         raise ValueError(
-
             "dataset_name must be cifar10 or mnist"
-
         )
+
 
 
     return dataset, in_channels, img_size
@@ -305,17 +248,17 @@ def load_model(dataset_name, checkpoint_path, device):
 
 
 
-    model.load_state_dict(
+    checkpoint = torch.load(
 
-        torch.load(
+        checkpoint_path,
 
-            checkpoint_path,
-
-            map_location=device
-
-        )
+        map_location=device
 
     )
+
+
+    model.load_state_dict(checkpoint)
+
 
 
     model.to(device)
@@ -355,9 +298,7 @@ def run_robustness_tests(
 
 
     print(
-
         f"Testing CNN+CBAM on {dataset_name.upper()} | Device: {device}"
-
     )
 
 
@@ -397,11 +338,11 @@ def run_robustness_tests(
 
 
 
-    # -------------------------
+    # ---------------------------------------------------
     # Baseline
-    # -------------------------
+    # ---------------------------------------------------
 
-    dataset, _, _ = get_dataset(
+    dataset,_,_ = get_dataset(
 
         dataset_name,
 
@@ -423,6 +364,7 @@ def run_robustness_tests(
     )
 
 
+
     acc = evaluate(
 
         model,
@@ -435,9 +377,7 @@ def run_robustness_tests(
 
 
     print(
-
         f"[Baseline] Accuracy: {acc:.2f}%"
-
     )
 
 
@@ -453,11 +393,15 @@ def run_robustness_tests(
 
 
 
-    # -------------------------
-    # Translation
-    # -------------------------
 
-    for px in range(2,42,2):
+    # ---------------------------------------------------
+    # Translation
+    # ---------------------------------------------------
+
+    translation_values = list(range(2,42,2))
+
+
+    for px in translation_values:
 
 
         dataset,_,_ = get_dataset(
@@ -480,6 +424,7 @@ def run_robustness_tests(
             num_workers=2
 
         )
+
 
 
         acc = evaluate(
@@ -512,9 +457,10 @@ def run_robustness_tests(
 
 
 
-    # -------------------------
+
+    # ---------------------------------------------------
     # Rotation
-    # -------------------------
+    # ---------------------------------------------------
 
     rotation_values = [
 
@@ -542,6 +488,7 @@ def run_robustness_tests(
         )
 
 
+
         loader = DataLoader(
 
             dataset,
@@ -553,6 +500,7 @@ def run_robustness_tests(
             num_workers=2
 
         )
+
 
 
         acc = evaluate(
@@ -573,6 +521,7 @@ def run_robustness_tests(
         )
 
 
+
         results.append({
 
             "transform":"rotation",
@@ -585,9 +534,10 @@ def run_robustness_tests(
 
 
 
-    # -------------------------
+
+    # ---------------------------------------------------
     # Flips
-    # -------------------------
+    # ---------------------------------------------------
 
     for name, transform in [
 
@@ -638,6 +588,7 @@ def run_robustness_tests(
         )
 
 
+
         results.append({
 
             "transform":name,
@@ -650,11 +601,13 @@ def run_robustness_tests(
 
 
 
-    # -------------------------
-    # Save Results
-    # -------------------------
+
+    # ---------------------------------------------------
+    # Save CSV
+    # ---------------------------------------------------
 
     df = pd.DataFrame(results)
+
 
 
     csv_path = (
@@ -662,6 +615,7 @@ def run_robustness_tests(
         f"./results/cnn_cbam/{dataset_name}/robustness.csv"
 
     )
+
 
 
     df.to_csv(
@@ -673,11 +627,13 @@ def run_robustness_tests(
     )
 
 
+
     print(
 
         f"Results saved to {csv_path}"
 
     )
+
 
 
     plot_results(
@@ -689,13 +645,14 @@ def run_robustness_tests(
     )
 
 
+
     return df
 
 
 
 
 # ---------------------------------------------------
-# Plotting
+# Plot
 # ---------------------------------------------------
 
 def plot_results(df, dataset_name):
@@ -713,7 +670,7 @@ def plot_results(df, dataset_name):
 
 
 
-    trans_df = df[
+    translation = df[
 
         df["transform"]=="translation"
 
@@ -723,9 +680,9 @@ def plot_results(df, dataset_name):
 
     axes[0].plot(
 
-        trans_df["value"],
+        translation["value"],
 
-        trans_df["accuracy"],
+        translation["accuracy"],
 
         marker="o"
 
@@ -738,23 +695,17 @@ def plot_results(df, dataset_name):
 
     )
 
-
     axes[0].set_xlabel(
-
         "Pixels"
-
     )
-
 
     axes[0].set_ylabel(
-
         "Accuracy (%)"
-
     )
 
 
 
-    rot_df = df[
+    rotation = df[
 
         df["transform"]=="rotation"
 
@@ -764,9 +715,9 @@ def plot_results(df, dataset_name):
 
     axes[1].plot(
 
-        rot_df["value"],
+        rotation["value"],
 
-        rot_df["accuracy"],
+        rotation["accuracy"],
 
         marker="o"
 
@@ -799,16 +750,17 @@ def plot_results(df, dataset_name):
 
 
 
-    path = (
+    plot_path = (
 
         f"./plots/cnn_cbam/{dataset_name}/robustness.png"
 
     )
 
 
+
     plt.savefig(
 
-        path,
+        plot_path,
 
         dpi=150
 
@@ -817,7 +769,7 @@ def plot_results(df, dataset_name):
 
     print(
 
-        f"Plot saved to {path}"
+        f"Plot saved to {plot_path}"
 
     )
 
@@ -835,6 +787,7 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser()
+
 
 
     parser.add_argument(
@@ -856,6 +809,7 @@ if __name__ == "__main__":
     )
 
 
+
     parser.add_argument(
 
         "--checkpoint",
@@ -867,6 +821,7 @@ if __name__ == "__main__":
     )
 
 
+
     parser.add_argument(
 
         "--batch_size",
@@ -876,6 +831,7 @@ if __name__ == "__main__":
         default=128
 
     )
+
 
 
     args = parser.parse_args()
