@@ -1,4 +1,4 @@
-# evaluate_robustness_cnn_cbam.py
+# evaluate_robustness_resnet18_cbam.py
 
 import os
 import argparse
@@ -14,12 +14,12 @@ import torchvision.transforms.functional as TF
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from models.cnn_cbam_model import CNN_CBAM
+from models.resnet18_cbam_model import ResNet18_CBAM
 
 
 
 # ---------------------------------------------------
-# Custom transforms
+# Transform wrappers
 # ---------------------------------------------------
 
 class TranslateTransform:
@@ -71,9 +71,8 @@ class VFlipTransform:
 
 
 
-
 # ---------------------------------------------------
-# Evaluation
+# Evaluation function
 # ---------------------------------------------------
 
 def evaluate(model, loader, device):
@@ -94,12 +93,10 @@ def evaluate(model, loader, device):
             labels = labels.to(device)
 
 
-
             outputs = model(images)
 
 
             _, predicted = outputs.max(1)
-
 
 
             correct += predicted.eq(labels).sum().item()
@@ -112,9 +109,8 @@ def evaluate(model, loader, device):
 
 
 
-
 # ---------------------------------------------------
-# Dataset Loader
+# Dataset loading
 # ---------------------------------------------------
 
 def get_dataset(dataset_name, extra_transform):
@@ -179,7 +175,6 @@ def get_dataset(dataset_name, extra_transform):
         ])
 
 
-
         dataset = torchvision.datasets.MNIST(
 
             root="./datasets/data",
@@ -202,9 +197,8 @@ def get_dataset(dataset_name, extra_transform):
     else:
 
         raise ValueError(
-            "dataset_name must be cifar10 or mnist"
+            "Dataset must be cifar10 or mnist"
         )
-
 
 
     return dataset, in_channels, img_size
@@ -213,7 +207,7 @@ def get_dataset(dataset_name, extra_transform):
 
 
 # ---------------------------------------------------
-# Load Model
+# Load model
 # ---------------------------------------------------
 
 def load_model(dataset_name, checkpoint_path, device):
@@ -222,13 +216,11 @@ def load_model(dataset_name, checkpoint_path, device):
     if dataset_name == "cifar10":
 
 
-        model = CNN_CBAM(
+        model = ResNet18_CBAM(
 
             in_channels=3,
 
-            num_classes=10,
-
-            img_size=32
+            num_classes=10
 
         )
 
@@ -236,16 +228,13 @@ def load_model(dataset_name, checkpoint_path, device):
     else:
 
 
-        model = CNN_CBAM(
+        model = ResNet18_CBAM(
 
             in_channels=1,
 
-            num_classes=10,
-
-            img_size=28
+            num_classes=10
 
         )
-
 
 
     checkpoint = torch.load(
@@ -260,8 +249,8 @@ def load_model(dataset_name, checkpoint_path, device):
     model.load_state_dict(checkpoint)
 
 
-
     model.to(device)
+
 
     model.eval()
 
@@ -272,7 +261,7 @@ def load_model(dataset_name, checkpoint_path, device):
 
 
 # ---------------------------------------------------
-# Robustness Testing
+# Robustness testing
 # ---------------------------------------------------
 
 def run_robustness_tests(
@@ -298,14 +287,16 @@ def run_robustness_tests(
 
 
     print(
-        f"Testing CNN+CBAM on {dataset_name.upper()} | Device: {device}"
+
+        f"Testing ResNet18+CBAM on {dataset_name.upper()} | Device: {device}"
+
     )
 
 
 
     os.makedirs(
 
-        f"./results/cnn_cbam/{dataset_name}",
+        f"./results/resnet18_cbam/{dataset_name}",
 
         exist_ok=True
 
@@ -314,7 +305,7 @@ def run_robustness_tests(
 
     os.makedirs(
 
-        f"./plots/cnn_cbam/{dataset_name}",
+        f"./plots/resnet18_cbam/{dataset_name}",
 
         exist_ok=True
 
@@ -331,7 +322,6 @@ def run_robustness_tests(
         device
 
     )
-
 
 
     results = []
@@ -359,10 +349,11 @@ def run_robustness_tests(
 
         shuffle=False,
 
-        num_workers=2
+        num_workers=2,
+
+        pin_memory=True
 
     )
-
 
 
     acc = evaluate(
@@ -377,7 +368,9 @@ def run_robustness_tests(
 
 
     print(
+
         f"[Baseline] Accuracy: {acc:.2f}%"
+
     )
 
 
@@ -390,7 +383,6 @@ def run_robustness_tests(
         "accuracy":acc
 
     })
-
 
 
 
@@ -421,10 +413,11 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2
+            num_workers=2,
+
+            pin_memory=True
 
         )
-
 
 
         acc = evaluate(
@@ -457,7 +450,6 @@ def run_robustness_tests(
 
 
 
-
     # ---------------------------------------------------
     # Rotation
     # ---------------------------------------------------
@@ -475,7 +467,6 @@ def run_robustness_tests(
     ]
 
 
-
     for angle in rotation_values:
 
 
@@ -488,7 +479,6 @@ def run_robustness_tests(
         )
 
 
-
         loader = DataLoader(
 
             dataset,
@@ -497,10 +487,11 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2
+            num_workers=2,
+
+            pin_memory=True
 
         )
-
 
 
         acc = evaluate(
@@ -521,7 +512,6 @@ def run_robustness_tests(
         )
 
 
-
         results.append({
 
             "transform":"rotation",
@@ -531,7 +521,6 @@ def run_robustness_tests(
             "accuracy":acc
 
         })
-
 
 
 
@@ -565,7 +554,9 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2
+            num_workers=2,
+
+            pin_memory=True
 
         )
 
@@ -588,7 +579,6 @@ def run_robustness_tests(
         )
 
 
-
         results.append({
 
             "transform":name,
@@ -601,7 +591,6 @@ def run_robustness_tests(
 
 
 
-
     # ---------------------------------------------------
     # Save CSV
     # ---------------------------------------------------
@@ -609,13 +598,11 @@ def run_robustness_tests(
     df = pd.DataFrame(results)
 
 
-
     csv_path = (
 
-        f"./results/cnn_cbam/{dataset_name}/robustness.csv"
+        f"./results/resnet18_cbam/{dataset_name}/robustness.csv"
 
     )
-
 
 
     df.to_csv(
@@ -627,13 +614,11 @@ def run_robustness_tests(
     )
 
 
-
     print(
 
         f"Results saved to {csv_path}"
 
     )
-
 
 
     plot_results(
@@ -643,7 +628,6 @@ def run_robustness_tests(
         dataset_name
 
     )
-
 
 
     return df
@@ -669,20 +653,18 @@ def plot_results(df, dataset_name):
     )
 
 
-
-    translation = df[
+    trans_df = df[
 
         df["transform"]=="translation"
 
     ]
 
 
-
     axes[0].plot(
 
-        translation["value"],
+        trans_df["value"],
 
-        translation["accuracy"],
+        trans_df["accuracy"],
 
         marker="o"
 
@@ -691,33 +673,36 @@ def plot_results(df, dataset_name):
 
     axes[0].set_title(
 
-        f"CNN+CBAM {dataset_name.upper()} Translation"
+        f"ResNet18+CBAM {dataset_name.upper()} Translation"
 
     )
 
     axes[0].set_xlabel(
+
         "Pixels"
+
     )
 
     axes[0].set_ylabel(
+
         "Accuracy (%)"
+
     )
 
 
 
-    rotation = df[
+    rot_df = df[
 
         df["transform"]=="rotation"
 
     ]
 
 
-
     axes[1].plot(
 
-        rotation["value"],
+        rot_df["value"],
 
-        rotation["accuracy"],
+        rot_df["accuracy"],
 
         marker="o"
 
@@ -726,7 +711,7 @@ def plot_results(df, dataset_name):
 
     axes[1].set_title(
 
-        f"CNN+CBAM {dataset_name.upper()} Rotation"
+        f"ResNet18+CBAM {dataset_name.upper()} Rotation"
 
     )
 
@@ -750,17 +735,16 @@ def plot_results(df, dataset_name):
 
 
 
-    plot_path = (
+    path = (
 
-        f"./plots/cnn_cbam/{dataset_name}/robustness.png"
+        f"./plots/resnet18_cbam/{dataset_name}/robustness.png"
 
     )
 
 
-
     plt.savefig(
 
-        plot_path,
+        path,
 
         dpi=150
 
@@ -769,7 +753,7 @@ def plot_results(df, dataset_name):
 
     print(
 
-        f"Plot saved to {plot_path}"
+        f"Plot saved to {path}"
 
     )
 
@@ -780,14 +764,13 @@ def plot_results(df, dataset_name):
 
 
 # ---------------------------------------------------
-# CLI
+# Main
 # ---------------------------------------------------
 
 if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser()
-
 
 
     parser.add_argument(
@@ -809,7 +792,6 @@ if __name__ == "__main__":
     )
 
 
-
     parser.add_argument(
 
         "--checkpoint",
@@ -821,7 +803,6 @@ if __name__ == "__main__":
     )
 
 
-
     parser.add_argument(
 
         "--batch_size",
@@ -831,7 +812,6 @@ if __name__ == "__main__":
         default=128
 
     )
-
 
 
     args = parser.parse_args()
