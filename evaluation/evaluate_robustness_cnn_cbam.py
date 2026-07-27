@@ -1,4 +1,4 @@
-# evaluate_robustness_resnet18_cbam.py
+# evaluate_robustness_cnn_cbam.py
 
 import os
 import argparse
@@ -14,12 +14,12 @@ import torchvision.transforms.functional as TF
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from models.resnet18_cbam_model import ResNet18_CBAM
+from models.cnn_cbam_model import CNN_CBAM
 
 
 
 # ---------------------------------------------------
-# Transform wrappers
+# Transform classes
 # ---------------------------------------------------
 
 class TranslateTransform:
@@ -72,7 +72,7 @@ class VFlipTransform:
 
 
 # ---------------------------------------------------
-# Evaluation function
+# Evaluation
 # ---------------------------------------------------
 
 def evaluate(model, loader, device):
@@ -93,10 +93,12 @@ def evaluate(model, loader, device):
             labels = labels.to(device)
 
 
+
             outputs = model(images)
 
 
             _, predicted = outputs.max(1)
+
 
 
             correct += predicted.eq(labels).sum().item()
@@ -109,8 +111,9 @@ def evaluate(model, loader, device):
 
 
 
+
 # ---------------------------------------------------
-# Dataset loading
+# Dataset loader
 # ---------------------------------------------------
 
 def get_dataset(dataset_name, extra_transform):
@@ -136,6 +139,7 @@ def get_dataset(dataset_name, extra_transform):
         ])
 
 
+
         dataset = torchvision.datasets.CIFAR10(
 
             root="./datasets/data",
@@ -147,12 +151,6 @@ def get_dataset(dataset_name, extra_transform):
             transform=transform
 
         )
-
-
-        in_channels = 3
-
-        img_size = 32
-
 
 
     elif dataset_name == "mnist":
@@ -175,6 +173,7 @@ def get_dataset(dataset_name, extra_transform):
         ])
 
 
+
         dataset = torchvision.datasets.MNIST(
 
             root="./datasets/data",
@@ -188,12 +187,6 @@ def get_dataset(dataset_name, extra_transform):
         )
 
 
-        in_channels = 1
-
-        img_size = 28
-
-
-
     else:
 
         raise ValueError(
@@ -201,13 +194,13 @@ def get_dataset(dataset_name, extra_transform):
         )
 
 
-    return dataset, in_channels, img_size
+    return dataset
 
 
 
 
 # ---------------------------------------------------
-# Load model
+# Load CNN+CBAM model
 # ---------------------------------------------------
 
 def load_model(dataset_name, checkpoint_path, device):
@@ -216,11 +209,13 @@ def load_model(dataset_name, checkpoint_path, device):
     if dataset_name == "cifar10":
 
 
-        model = ResNet18_CBAM(
+        model = CNN_CBAM(
 
             in_channels=3,
 
-            num_classes=10
+            num_classes=10,
+
+            img_size=32
 
         )
 
@@ -228,13 +223,16 @@ def load_model(dataset_name, checkpoint_path, device):
     else:
 
 
-        model = ResNet18_CBAM(
+        model = CNN_CBAM(
 
             in_channels=1,
 
-            num_classes=10
+            num_classes=10,
+
+            img_size=28
 
         )
+
 
 
     checkpoint = torch.load(
@@ -288,7 +286,7 @@ def run_robustness_tests(
 
     print(
 
-        f"Testing ResNet18+CBAM on {dataset_name.upper()} | Device: {device}"
+        f"Testing CNN+CBAM on {dataset_name.upper()} | Device: {device}"
 
     )
 
@@ -296,7 +294,7 @@ def run_robustness_tests(
 
     os.makedirs(
 
-        f"./results/resnet18_cbam/{dataset_name}",
+        f"./results/cnn_cbam/{dataset_name}",
 
         exist_ok=True
 
@@ -305,7 +303,7 @@ def run_robustness_tests(
 
     os.makedirs(
 
-        f"./plots/resnet18_cbam/{dataset_name}",
+        f"./plots/cnn_cbam/{dataset_name}",
 
         exist_ok=True
 
@@ -324,6 +322,7 @@ def run_robustness_tests(
     )
 
 
+
     results = []
 
 
@@ -332,7 +331,7 @@ def run_robustness_tests(
     # Baseline
     # ---------------------------------------------------
 
-    dataset,_,_ = get_dataset(
+    dataset = get_dataset(
 
         dataset_name,
 
@@ -354,6 +353,7 @@ def run_robustness_tests(
         pin_memory=True
 
     )
+
 
 
     acc = evaluate(
@@ -396,7 +396,7 @@ def run_robustness_tests(
     for px in translation_values:
 
 
-        dataset,_,_ = get_dataset(
+        dataset = get_dataset(
 
             dataset_name,
 
@@ -418,6 +418,7 @@ def run_robustness_tests(
             pin_memory=True
 
         )
+
 
 
         acc = evaluate(
@@ -467,10 +468,11 @@ def run_robustness_tests(
     ]
 
 
+
     for angle in rotation_values:
 
 
-        dataset,_,_ = get_dataset(
+        dataset = get_dataset(
 
             dataset_name,
 
@@ -492,6 +494,7 @@ def run_robustness_tests(
             pin_memory=True
 
         )
+
 
 
         acc = evaluate(
@@ -525,7 +528,7 @@ def run_robustness_tests(
 
 
     # ---------------------------------------------------
-    # Flips
+    # Flip tests
     # ---------------------------------------------------
 
     for name, transform in [
@@ -537,7 +540,7 @@ def run_robustness_tests(
     ]:
 
 
-        dataset,_,_ = get_dataset(
+        dataset = get_dataset(
 
             dataset_name,
 
@@ -554,9 +557,7 @@ def run_robustness_tests(
 
             shuffle=False,
 
-            num_workers=2,
-
-            pin_memory=True
+            num_workers=2
 
         )
 
@@ -598,11 +599,13 @@ def run_robustness_tests(
     df = pd.DataFrame(results)
 
 
+
     csv_path = (
 
-        f"./results/resnet18_cbam/{dataset_name}/robustness.csv"
+        f"./results/cnn_cbam/{dataset_name}/robustness.csv"
 
     )
+
 
 
     df.to_csv(
@@ -619,6 +622,7 @@ def run_robustness_tests(
         f"Results saved to {csv_path}"
 
     )
+
 
 
     plot_results(
@@ -653,18 +657,20 @@ def plot_results(df, dataset_name):
     )
 
 
-    trans_df = df[
+
+    translation = df[
 
         df["transform"]=="translation"
 
     ]
 
 
+
     axes[0].plot(
 
-        trans_df["value"],
+        translation["value"],
 
-        trans_df["accuracy"],
+        translation["accuracy"],
 
         marker="o"
 
@@ -673,15 +679,17 @@ def plot_results(df, dataset_name):
 
     axes[0].set_title(
 
-        f"ResNet18+CBAM {dataset_name.upper()} Translation"
+        f"CNN+CBAM {dataset_name.upper()} Translation"
 
     )
+
 
     axes[0].set_xlabel(
 
         "Pixels"
 
     )
+
 
     axes[0].set_ylabel(
 
@@ -691,18 +699,19 @@ def plot_results(df, dataset_name):
 
 
 
-    rot_df = df[
+    rotation = df[
 
         df["transform"]=="rotation"
 
     ]
 
 
+
     axes[1].plot(
 
-        rot_df["value"],
+        rotation["value"],
 
-        rot_df["accuracy"],
+        rotation["accuracy"],
 
         marker="o"
 
@@ -711,7 +720,7 @@ def plot_results(df, dataset_name):
 
     axes[1].set_title(
 
-        f"ResNet18+CBAM {dataset_name.upper()} Rotation"
+        f"CNN+CBAM {dataset_name.upper()} Rotation"
 
     )
 
@@ -735,16 +744,17 @@ def plot_results(df, dataset_name):
 
 
 
-    path = (
+    plot_path = (
 
-        f"./plots/resnet18_cbam/{dataset_name}/robustness.png"
+        f"./plots/cnn_cbam/{dataset_name}/robustness.png"
 
     )
 
 
+
     plt.savefig(
 
-        path,
+        plot_path,
 
         dpi=150
 
@@ -753,7 +763,7 @@ def plot_results(df, dataset_name):
 
     print(
 
-        f"Plot saved to {path}"
+        f"Plot saved to {plot_path}"
 
     )
 
